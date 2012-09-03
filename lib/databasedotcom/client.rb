@@ -36,6 +36,8 @@ module Databasedotcom
     attr_accessor :ca_file
     # The SSL verify mode configured for this instance, if any
     attr_accessor :verify_mode
+    # The flag to use post to perform patch requests for this instance, if any
+    attr_accessor :patch_using_post
 
     # Returns a new client object. _options_ can be one of the following
     #
@@ -49,6 +51,7 @@ module Databasedotcom
     #    sobject_module: My::Module
     #    ca_file: some/ca/file.cert
     #    verify_mode: OpenSSL::SSL::VERIFY_PEER
+    #    patch_using_post: true
     # * A Hash containing the following keys:
     #    client_id
     #    client_secret
@@ -58,9 +61,11 @@ module Databasedotcom
     #    sobject_module
     #    ca_file
     #    verify_mode
+    #    patch_using_post
     # If the environment variables DATABASEDOTCOM_CLIENT_ID, DATABASEDOTCOM_CLIENT_SECRET, DATABASEDOTCOM_HOST,
-    # DATABASEDOTCOM_DEBUGGING, DATABASEDOTCOM_VERSION, DATABASEDOTCOM_SOBJECT_MODULE, DATABASEDOTCOM_CA_FILE, and/or
-    # DATABASEDOTCOM_VERIFY_MODE are present, they override any other values provided
+    # DATABASEDOTCOM_DEBUGGING, DATABASEDOTCOM_VERSION, DATABASEDOTCOM_SOBJECT_MODULE, DATABASEDOTCOM_CA_FILE, 
+    # DATABASEDOTCOM_PATCH_USING_POST and/or DATABASEDOTCOM_VERIFY_MODE are present, they override any other 
+    # values provided
     def initialize(options = {})
       if options.is_a?(String)
         @options = YAML.load_file(options)
@@ -90,6 +95,7 @@ module Databasedotcom
       self.sobject_module = ENV['DATABASEDOTCOM_SOBJECT_MODULE'] || @options[:sobject_module]
       self.ca_file = ENV['DATABASEDOTCOM_CA_FILE'] || @options[:ca_file]
       self.verify_mode = ENV['DATABASEDOTCOM_VERIFY_MODE'] || @options[:verify_mode]
+      self.patch_using_post = ENV['DATABASEDOTCOM_PATCH_USING_POST'] || @options[:patch_using_post]
       self.verify_mode = self.verify_mode.to_i if self.verify_mode
     end
 
@@ -313,8 +319,13 @@ module Databasedotcom
     # Query parameters are included from _parameters_.  The required +Authorization+ header is automatically included, as are any additional
     # headers specified in _headers_.  Returns the HTTPResult if it is of type HTTPSuccess- raises SalesForceError otherwise.
     def http_patch(path, data=nil, parameters={}, headers={})
-      with_encoded_path_and_checked_response(path, parameters, {:data => data}) do |encoded_path|
-        https_request.send_request("PATCH", encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+      if (self.patch_using_post)
+        (parameters || {}).merge!({"_HttpMethod" => "PATCH"})
+        http_post(path, data, parameters, headers)
+      else
+        with_encoded_path_and_checked_response(path, parameters, {:data => data}) do |encoded_path|
+           https_request.send_request("PATCH", encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+        end
       end
     end
 
