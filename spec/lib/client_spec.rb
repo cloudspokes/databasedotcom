@@ -15,6 +15,7 @@ describe Databasedotcom::Client do
         ENV['DATABASEDOTCOM_SOBJECT_MODULE'] = "Databasedotcom::Sobject"
         ENV['DATABASEDOTCOM_CA_FILE'] = "ca/file.cert"
         ENV['DATABASEDOTCOM_VERIFY_MODE'] = "1"
+        ENV['DATABASEDOTCOM_PATCH_USING_POST'] = "true"
         @client = Databasedotcom::Client.new
       end
 
@@ -28,6 +29,7 @@ describe Databasedotcom::Client do
         ENV.delete "DATABASE_COM_URL"
         ENV.delete "DATABASEDOTCOM_CA_FILE"
         ENV.delete "DATABASEDOTCOM_VERIFY_MODE"
+        ENV.delete "DATABASEDOTCOM_PATCH_USING_POST"
       end
 
       it "takes configuration information from the environment, if present" do
@@ -39,6 +41,7 @@ describe Databasedotcom::Client do
         @client.sobject_module.should == "Databasedotcom::Sobject"
         @client.ca_file.should == "ca/file.cert"
         @client.verify_mode.should == 1
+        @client.patch_using_post.should be_true
       end
 
       it "takes configuration information from a URL" do
@@ -52,6 +55,7 @@ describe Databasedotcom::Client do
         @client.sobject_module.should == "Databasedotcom::Sobject"
         @client.ca_file.should == "ca/file.cert"
         @client.verify_mode.should == 1
+        @client.patch_using_post.should be_true
       end
     end
 
@@ -65,12 +69,13 @@ describe Databasedotcom::Client do
         client.version.should == '88'
         client.ca_file.should == "other/ca/file.cert"
         client.verify_mode.should == 1
+        client.patch_using_post.should be_true
       end
     end
 
     context "from a hash" do
       it "takes configuration information from the hash" do
-        client = Databasedotcom::Client.new("client_id" => "client_id", "client_secret" => "client_secret", "debugging" => true, "host" => "foo.baz", "version" => "77", "ca_file" => "alt/ca/file.cert", "verify_mode" => 3)
+        client = Databasedotcom::Client.new("client_id" => "client_id", "client_secret" => "client_secret", "debugging" => true, "host" => "foo.baz", "version" => "77", "ca_file" => "alt/ca/file.cert", "verify_mode" => 3, "patch_using_post" => true)
         client.client_id.should == "client_id"
         client.client_secret.should == "client_secret"
         client.debugging.should be_true
@@ -78,10 +83,11 @@ describe Databasedotcom::Client do
         client.version.should == "77"
         client.ca_file.should == "alt/ca/file.cert"
         client.verify_mode.should == 3
+        client.patch_using_post.should be_true
       end
 
       it "accepts symbols in the hash" do
-        client = Databasedotcom::Client.new(:client_id => "client_id", :client_secret => "client_secret", :debugging => true, :host => "foo.baz", :version => "77", :ca_file => "alt/ca/file.cert", :verify_mode => 3)
+        client = Databasedotcom::Client.new(:client_id => "client_id", :client_secret => "client_secret", :debugging => true, :host => "foo.baz", :version => "77", :ca_file => "alt/ca/file.cert", :verify_mode => 3, :patch_using_post => true)
         client.client_id.should == "client_id"
         client.client_secret.should == "client_secret"
         client.debugging.should be_true
@@ -89,6 +95,7 @@ describe Databasedotcom::Client do
         client.version.should == "77"
         client.ca_file.should == "alt/ca/file.cert"
         client.verify_mode.should == 3
+        client.patch_using_post.should be_true
       end
     end
 
@@ -103,6 +110,10 @@ describe Databasedotcom::Client do
 
       it "defaults to no debugging output" do
         @client.debugging.should be_false
+      end
+      
+      it "defaults to using real patch requests" do
+        @client.patch_using_post.should be_false
       end
 
       it "defaults to no special ca file" do
@@ -121,6 +132,7 @@ describe Databasedotcom::Client do
         ENV['DATABASEDOTCOM_DEBUGGING'] = "foo"
         ENV['DATABASEDOTCOM_HOST'] = "foo.bar"
         ENV['DATABASEDOTCOM_VERSION'] = '99'
+        ENV['DATABASEDOTCOM_PATCH_USING_POST'] = "foo"
       end
 
       after do
@@ -129,6 +141,7 @@ describe Databasedotcom::Client do
         ENV.delete 'DATABASEDOTCOM_DEBUGGING'
         ENV.delete 'DATABASEDOTCOM_HOST'
         ENV.delete 'DATABASEDOTCOM_VERSION'
+        ENV.delete 'DATABASEDOTCOM_PATCH_USING_POST'
       end
 
       it "prefers the environment configuration to the YAML configuration" do
@@ -138,6 +151,7 @@ describe Databasedotcom::Client do
         client.debugging.should == "foo"
         client.host.should == "foo.bar"
         client.version.should == '99'
+        client.patch_using_post.should == "foo"
       end
     end
   end
@@ -860,6 +874,9 @@ describe Databasedotcom::Client do
 
       describe "#update" do
         context "with proper fields" do
+          before do
+            @client.patch_using_post = false
+          end
           context "with attributes from a JSON" do
             it "persists the updated changes" do
               stub_request(:patch, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid").to_return(:body => nil, :status => 204)
@@ -894,8 +911,48 @@ describe Databasedotcom::Client do
             end
           end
         end
+        
+        context "with proper fields performing patch request using post" do
+            context "with attributes from a JSON" do
+              it "persists the updated changes" do
+                stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH").to_return(:body => nil, :status => 204)
+                @client.update("Whizbang", "rid", "{\"Name\":\"update\"}")
+                WebMock.should have_requested(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH")
+              end
+            end
+
+            context "with attributes from a hash" do
+              it "persists the updated changes" do
+                stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH").to_return(:body => nil, :status => 204)
+                @client.update("Whizbang", "rid", {"Name" => "update"})
+                WebMock.should have_requested(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH")
+              end
+
+              it "persists the updated changes with names as symbols" do
+                stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH").to_return(:body => nil, :status => 204)
+                @client.update("Whizbang", "rid", {:Name => "update"})
+                WebMock.should have_requested(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH")
+              end
+
+              it "applies type coercions before serializing" do
+                stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH").to_return(:body => nil, :status => 204)
+                @client.update("Whizbang", "rid", "Date_Field" => Date.civil(2011, 1, 1), "DateTime_Field" => DateTime.civil(2011, 2, 1, 12), "Picklist_Multiselect_Field" => %w(a b))
+                WebMock.should have_requested(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH").with(:body => {"Date_Field" => "2011-01-01", "DateTime_Field" => "2011-02-01T12:00:00.000+0000", "Picklist_Multiselect_Field" => "a;b"})
+              end
+
+              it "applies type coercions with Dates represented as Strings" do
+                stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH").to_return(:body => nil, :status => 204)
+                @client.update("Whizbang", "rid", "Date_Field" => Date.civil(2011, 1, 1).to_s, "DateTime_Field" => DateTime.civil(2011, 2, 1, 12).to_s, "Picklist_Multiselect_Field" => %w(a b))
+                WebMock.should have_requested(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid?_HttpMethod=PATCH").with(:body => {"Date_Field" => "2011-01-01", "DateTime_Field" => "2011-02-01T12:00:00.000+0000", "Picklist_Multiselect_Field" => "a;b"})
+              end
+            end
+        end
+        
 
         context "with improper fields" do
+          before do
+            @client.patch_using_post = false
+          end
           before do
             @response_body = File.read(File.join(File.dirname(__FILE__), "../fixtures/sobject/write_error_response.json"))
             stub_request(:patch, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/rid").to_return(:body => @response_body, :status => 400)
@@ -911,6 +968,9 @@ describe Databasedotcom::Client do
 
       describe "#upsert" do
         context "with a valid external field" do
+          before do
+            @client.patch_using_post = false
+          end
           context "with a non-existent external id" do
             it "creates a new record with the external id and the specified attributes" do
               @response_body = File.read(File.join(File.dirname(__FILE__), "../fixtures/sobject/upsert_created_success_response.json"))
@@ -942,11 +1002,57 @@ describe Databasedotcom::Client do
             end
           end
         end
+        
+        context "with a valid external field performing patch request using post" do
+          context "with a non-existent external id" do
+            it "creates a new record with the external id and the specified attributes" do
+              @response_body = File.read(File.join(File.dirname(__FILE__), "../fixtures/sobject/upsert_created_success_response.json"))
+              stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/Name/somename?_HttpMethod=PATCH").to_return(:body => @response_body, :status => 201)
+              @client.upsert("Whizbang", "Name", "somename", "Name" => "newname")
+              WebMock.should have_requested(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/Name/somename?_HttpMethod=PATCH").with(:body => %|{"Name":"newname"}|)
+            end
+          end
+
+          context "with an existing external id" do
+            it "updates attributes in the existing object" do
+              @response_body = File.read(File.join(File.dirname(__FILE__), "../fixtures/sobject/upsert_updated_success_response.json"))
+              stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/Name/somename?_HttpMethod=PATCH").to_return(:body => @response_body, :status => 201)
+              @client.upsert("Whizbang", "Name", "somename", "Name" => "newname")
+              WebMock.should have_requested(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/Name/somename?_HttpMethod=PATCH").with(:body => %|{"Name":"newname"}|)
+            end
+          end
+
+          context "with multiple choice" do
+            before do
+              @response_body = File.read(File.join(File.dirname(__FILE__), "../fixtures/sobject/upsert_multiple_error_response.json"))
+              stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/Name/ambiguous?_HttpMethod=PATCH").to_return(:body => @response_body, :status => 300)
+            end
+
+            it "raises an Databasedotcom::SalesForceError" do
+              lambda {
+                @client.upsert("Whizbang", "Name", "ambiguous", "Name" => "newname")
+              }.should raise_error(Databasedotcom::SalesForceError)
+            end
+          end
+        end
 
         context "with an invalid external field" do
           before do
+            @client.patch_using_post = false
             @response_body = File.read(File.join(File.dirname(__FILE__), "../fixtures/sobject/upsert_error_response.json"))
             stub_request(:patch, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/Namez/fakename").to_return(:body => @response_body, :status => 404)
+          end
+
+          it "raises an Databasedotcom::SalesForceError" do
+            lambda {
+              @client.upsert("Whizbang", "Namez", "fakename", "{\"Name\":\"update\"}")
+            }.should raise_error(Databasedotcom::SalesForceError)
+          end
+        end
+        context "with an invalid external field performing patch request using post" do
+          before do
+            @response_body = File.read(File.join(File.dirname(__FILE__), "../fixtures/sobject/upsert_error_response.json"))
+            stub_request(:post, "https://na1.salesforce.com/services/data/v23.0/sobjects/Whizbang/Namez/fakename?_HttpMethod=PATCH").to_return(:body => @response_body, :status => 404)
           end
 
           it "raises an Databasedotcom::SalesForceError" do
@@ -1160,7 +1266,11 @@ describe Databasedotcom::Client do
       it_should_behave_like "a request that can refresh the oauth token", :post, "multipart_post", "https://na1.salesforce.com/my/path", 201
     end
 
-    describe "#http_patch" do
+    describe "#http_patch using patch request" do
+      before do
+        @client.patch_using_post = false
+      end
+      
       it "upserts the data to the specified path" do
         stub_request(:patch, "https://na1.salesforce.com/my/path").to_return(:body => "", :status => 201)
         @client.http_patch("/my/path", "data")
@@ -1181,6 +1291,33 @@ describe Databasedotcom::Client do
 
       it "raises SalesForceError" do
         stub_request(:patch, "https://na1.salesforce.com/my/path").to_return(:body => "", :status => 400)
+        lambda {
+          @client.http_patch("/my/path", "data", nil, {"Something" => "Header"})
+        }.should raise_error(Databasedotcom::SalesForceError)
+      end
+    end
+    describe "#http_patch performing patch request using post" do
+      
+      it "upserts the data to the specified path" do
+        stub_request(:post, "https://na1.salesforce.com/my/path?_HttpMethod=PATCH").to_return(:body => "", :status => 201)
+        @client.http_patch("/my/path", "data")
+        WebMock.should have_requested(:post, "https://na1.salesforce.com/my/path?_HttpMethod=PATCH").with(:data => "data")
+      end
+
+      it "puts parameters into the path" do
+        stub_request(:post, "https://na1.salesforce.com/my/path?_HttpMethod=PATCH&foo=bar&bro=baz%20bap").to_return(:body => "", :status => 201)
+        @client.http_patch("/my/path", "data", :foo => "bar", "bro" => "baz bap")
+        WebMock.should have_requested(:post, "https://na1.salesforce.com/my/path?_HttpMethod=PATCH&foo=bar&bro=baz%20bap")
+      end
+
+      it "includes the headers in the request" do
+        stub_request(:post, "https://na1.salesforce.com/my/path").to_return(:body => "", :status => 201)
+        @client.http_patch("/my/path", "data", nil, {"Something" => "Header"})
+        WebMock.should have_requested(:post, "https://na1.salesforce.com/my/path").with(:headers => {"Something" => "Header"})
+      end
+
+      it "raises SalesForceError" do
+        stub_request(:post, "https://na1.salesforce.com/my/path").to_return(:body => "", :status => 400)
         lambda {
           @client.http_patch("/my/path", "data", nil, {"Something" => "Header"})
         }.should raise_error(Databasedotcom::SalesForceError)

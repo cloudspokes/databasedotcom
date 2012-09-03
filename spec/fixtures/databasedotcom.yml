@@ -6,3 +6,4 @@ host: bro.baz
 version: 88
 ca_file: other/ca/file.cert
 verify_mode: OpenSSL::SSL::VERIFY_PEER
+patch_using_post: true
