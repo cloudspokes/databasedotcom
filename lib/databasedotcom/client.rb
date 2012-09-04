@@ -312,9 +312,16 @@ module Databasedotcom
     # Performs an HTTP PATCH request to the specified path (relative to self.instance_url).  The body of the request is taken from _data_.
     # Query parameters are included from _parameters_.  The required +Authorization+ header is automatically included, as are any additional
     # headers specified in _headers_.  Returns the HTTPResult if it is of type HTTPSuccess- raises SalesForceError otherwise.
+    # NOTE: 
+    #  patch request send by https_request.patch or https_request.send_request('PATCH') is not recognize by the database.com
+    #  so send post request by adding parameter {'_HttpMethod' => 'PATCH'}
+    # 
     def http_patch(path, data=nil, parameters={}, headers={})
+      parameters.merge!({'_HttpMethod' => 'PATCH'})
+
       with_encoded_path_and_checked_response(path, parameters, {:data => data}) do |encoded_path|
-        https_request.send_request("PATCH", encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+        #https_request.send_request("PATCH", encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+        https_request.post(encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
       end
     end
 
